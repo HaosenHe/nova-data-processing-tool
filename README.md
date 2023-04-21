@@ -18,11 +18,11 @@ Data processing toolkit for Nova Home Support (and maybe other residential care 
 
 ### Get Started
 
->1. Download and install Anaconda from https://www.anaconda.com/download/
+&nbsp;1. Download and install Anaconda from https://www.anaconda.com/download/
 
->2. Download demo.py in this GitHub repository. 
+&nbsp;2. Download demo.py in this GitHub repository. 
 
->3. In command line (Windows) or terminal (MacOS), type:
+&nbsp;3. In command line (Windows) or terminal (MacOS), type:
 
 ```shell
 python3 .../file-path-on-your-computer/demo.py
