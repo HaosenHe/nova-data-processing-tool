@@ -37,3 +37,7 @@ Save results to a new column named "Sanity Check".
 ```shell
 python3 .../file-path-on-your-computer/demo.py
 ```
+
+&nbsp;4. You should now see the following user interface:
+
+<img width="556" alt="image" src="https://user-images.githubusercontent.com/29806214/233531604-a1c7e24d-095a-4a18-930d-0ab9ec3b3c2a.png">
