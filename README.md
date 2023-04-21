@@ -2,7 +2,7 @@
 
 Data processing toolkit for Nova Home Support (and maybe other residential care programs).
 
-### Current capabilities:
+### Current Capabilities:
 * Drop irrelevant columns.
 
 * Convert "Service 1 Auth Form ID" and "Service Provider" to desired formats.
