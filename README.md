@@ -12,7 +12,7 @@ Data processing toolkit for Nova Home Support (and maybe other residential care 
 * Check if "Staff Worked Duration" is consistent with "Staff Worked Duration (Minutes)" and check-in/check-out records. 
 Save results to a new column named "Sanity Check".
 
-### Directory:
+### File Directory:
 
   * README.md: This file.
   
