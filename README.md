@@ -5,7 +5,7 @@ Data processing toolkit for Nova Home Support (and maybe other residential care 
 ### Current Capabilities:
 * Drop irrelevant columns.
 
-* Convert "Service 1 Auth Form ID" and "Service Provider" to desired formats.
+* Convert "Service 1 Description (Code)" and "Service Provider" to desired formats.
 
 * Correct "Check-In Date", "Check-In Time", "Check-Out Date", and "Check-Out Time".
 
