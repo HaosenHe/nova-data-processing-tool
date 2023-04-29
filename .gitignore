@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Excel file
+.xlsx
+
+# Noteboook
+.ipynb

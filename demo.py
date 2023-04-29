@@ -1,42 +1,50 @@
 # Version 0.0.3
-# April 20, 2023
+# April 28, 2023
 import pandas as pd # For importing, manipulating, and exporting data
 import re # Python regular expression support
 import datetime # Python datetime conversion support
 from concurrent.futures import process # Asynchronous callable execution
-from dateutil.easter import *
-import holidays
+from dateutil.easter import * # Identify Easter Sunday
+import holidays # Identify holiday date
 from tkinter import * # For user interface
 from tkinter.filedialog import askopenfile, askopenfilename, askdirectory,asksaveasfile # UI-file system interaction
-from copy import deepcopy
-from collections import namedtuple
-from helpers import *
-from copy import deepcopy
-#######################################
-#Backend
-Range = namedtuple('Range', ['start', 'end'])
-df = pd.DataFrame()
-manager_rates = pd.DataFrame()
-non_manager_rates = pd.DataFrame()
+from copy import deepcopy 
+from collections import namedtuple # for date range object
+from helpers import * #helper functions
 
+# define time range object
+Range = namedtuple('Range', ['start', 'end'])
+
+# GLOBAL VARIABLES:
+# shift data
+df = pd.DataFrame()
+# manager rates data
+manager_rates = pd.DataFrame()
+# non-manager rates data
+non_manager_rates = pd.DataFrame()
+# shift data merged with non-manager rates
 df_aug = pd.DataFrame()
+# payroll for non-managers
 non_mgr_payroll = pd.DataFrame()
+# payroll for managers
 mgr_payroll = pd.DataFrame()
+# a string indicating pay period
 PAY_PERIOD = ''
 
 def open_shift_file():
     '''
-    Done
+    Open an Excel file containing shift records and check formatting.
     '''
     global df
     filepath =''
     read_shift_lab.configure(text='')
     try:
-        shift_processed_lab.config(text="")
+        processed_lab.config(text="")
         save_lab.config(text="")
         filepath = askopenfilename()
         df=pd.read_excel(filepath)
-        try:    
+        try:
+            # Subsetting useful columns
             df = df[['Service 1 Description (Code)', 
                     'Service Provider','Check-In Date',
                     'Check-In Time',
@@ -48,22 +56,24 @@ def open_shift_file():
                     'Updated Check-Out Time',
                     'Staff Worked Duration',
                     'Staff Worked Duration (Minutes)']]
+            # Success message
             read_shift_lab.configure(text='Shift Record Loaded Successfully.')
         except:
             read_shift_lab.configure(text='The File Does Not Contain All Columns Needed.')
-    except:
-        if filepath != '':
+    except: # Non-excel
+        if filepath != '': # File selection is not "cancelled"
             read_shift_lab.configure(text='The File Must Be An Excel.')
+            
 
 def open_rates_file():
     '''
-    Done
+    Open an Excel file containing manager and non-manager rates and check formatting.
     '''
     global manager_rates, non_manager_rates
     filepath =''
     read_wage_lab.configure(text='')
     try:
-        shift_processed_lab.config(text='')
+        processed_lab.config(text='')
         save_lab.config(text='')
         filepath = askopenfilename()
         # Read "Manger Rates" sheet
@@ -73,21 +83,21 @@ def open_rates_file():
         try:
             non_manager_rates = non_manager_rates[['Shift Code', 'Regular Hourly Wage', 'BOT Hourly Wage', 'Accrue Rate']]
             manager_rates = manager_rates[['Name', 'Non-exempt Hourly Wage', 'Exempt Weekly Wage', 'Exempt Biweekly Wage', 'Accrue Rate']]
-            read_wage_lab.configure(text='Billing & Wage Info Loaded Successfully.')
+            read_wage_lab.configure(text='Billing & Wage Rates Loaded Successfully.')
         except:
             read_wage_lab.configure(text='The File Does Not Contain All Columns Needed.')
     except:
-        if filepath!='':
-            read_wage_lab.configure(text='The File Must Be An Excel.')
+        if filepath=='':
+            return
         else:
-            read_wage_lab.configure(text='The file does not contain Manager Rates and Non-manager Rates.')
+            read_wage_lab.configure(text='The File Must Be An Excel Containing Manager and Non-Manager Rates.')
 
 def process_shift():
     '''
-    Done
+    Process shift records
     '''
     global df, PAY_PERIOD
-    shift_processed_lab.configure(text='')
+    processed_lab.configure(text='')
     # Remove parentheses and everything within them
     try:
         df['Service 1 Description (Code)'] = df['Service 1 Description (Code)'].str.replace(r'\(.*\)', '')
@@ -98,10 +108,10 @@ def process_shift():
         # Remove everything after " /"
         df['Service Provider'] = df['Service Provider'].str.split(' /', n=1).str[0]
     except:
-        shift_processed_lab.configure(text='Problem Detected in Service 1 Description (Code)/Service Provider')
+        processed_lab.configure(text='Problem Detected in Service 1 Description (Code)/Service Provider')
         return
-    # Replace Date/Time with Updated Date/Time if the latter is not NaN
     try:
+        # Replace Date/Time with Updated Date/Time if the latter is not NaN
         df['Check-In Date'] = df['Updated Check-In Date'].fillna(df['Check-In Date'])
         df['Check-In Time'] = df['Updated Check-In Time'].fillna(df['Check-In Time'])
         df['Check-Out Date'] = df['Updated Check-Out Date'].fillna(df['Check-Out Date'])
@@ -119,15 +129,14 @@ def process_shift():
         CTD = (CODT - CIDT).dt.total_seconds() / 60
 
     except:
-        shift_processed_lab.configure(text='Problem Detected in Check-In/Check-Out Dates and Times')
+        processed_lab.configure(text='Problem Detected in Check-In/Check-Out Dates and Times')
         return
     # Convert Staff Work Duration from Hour:Minutes to Minutes
     try:
         SWD_min = df['Staff Worked Duration'].apply(lambda x: (int(x.split(':')[0]) * 60) + int(x.split(':')[1]))
     except:
-        shift_processed_lab.configure(text='Problem Detected in Staff Worked Duration/Staff Worked Duration (Minutes)')
+        processed_lab.configure(text='Problem Detected in Staff Worked Duration/Staff Worked Duration (Minutes)')
         return
-    
     df = df.rename(columns={'Service 1 Description (Code)': 'Shift Code'})
     # Error check:
     # 1. Check if Staff Work Duration == Staff Work Duration (Minutes)
@@ -137,45 +146,53 @@ def process_shift():
     df["Passed Error Check"] = (error1 & error2) # The data is "sane" only when both checks are passed
     save_btn["state"] = "normal" # Enable saving botton
     if df['Passed Error Check'].all():
-        shift_processed_lab.configure(text='File Processed. We Found No Errors.')
+        processed_lab.configure(text='File Processed. We Found No Errors.')
     else:
-        counts_1 = error1.value_counts()
-        counts_2 = error2.value_counts()
-        false_count_1 = counts_1[False]
-        false_count_2 = counts_2[False]
-        shift_processed_lab.configure(text= f'Shift File Processed. {false_count_1} Staff Work Duration Unequal to Staff Work Duration (Minutes).\n{false_count_2} Staff Work Duration (Minutes) Unequal to Calculated Time Difference.')
+        false_count_1 = len(error1[error1 == False])
+        false_count_2 = len(error2[error2 == False])
+        processed_lab.configure(text= f'Shift File Processed. {false_count_1} Staff Work Duration Unequal to \nStaff Work Duration (Minutes).{false_count_2} Staff Work Duration (Minutes) Unequal \nto Calculated Time Difference.')
 
 def process_payroll():
-    '''Done'''
+    '''
+    Process payroll for managers and non-managers
+    '''
     global df, manager_rates, non_manager_rates, df_aug, non_mgr_payroll, mgr_payroll, PAY_PERIOD
-    df_aug = df.rename(columns={'Service 1 Description (Code)': 'Shift Code'})
-    df_aug = deepcopy(df_aug.loc[~df_aug['Shift Code'].str.contains('Adaptive Behavior Treatment')])
-    # split the 'Service Provider' column on comma separator and extract First name and Surname
-    df_aug[['Surname', 'First Name']] = df_aug['Service Provider'].str.split(', ', expand=True)
-    # concatenate First name and Surname columns in the desired order
-    df_aug['Service Provider'] = df_aug['First Name'] + ' ' + df_aug['Surname']
-    # drop First name and Surname columns
-    df_aug.drop(columns=['First Name', 'Surname'], inplace=True)
-    df_aug=pd.merge(df_aug, non_manager_rates, how='left', on='Shift Code')
-    for name, accrued in zip(manager_rates['Name'], manager_rates['Accrue Rate']):
-        df_aug.loc[(df_aug['Service Provider'] == name), ['Accrue Rate']] = accrued
-    # Add Holiday Hours
-    calc_holiday_hours(df_aug)
-    # Identify staff roles:
-    staff_names = df_aug['Service Provider'].unique()
-    manager_status = [is_manager(i, manager_rates) for i in staff_names]
-    non_mgr = [] #list of names
-    mgr = [] #list of names
-    for i, name in enumerate(staff_names):
-        if manager_status[i]:
-            mgr.append(name)
-        else:
-            non_mgr.append(name)
-    non_mgr_payroll = non_manager_payroll(non_mgr, df_aug, PAY_PERIOD)
-    mgr_payroll = manager_payroll(mgr, manager_rates, df_aug, PAY_PERIOD)
+    try:
+        # prepare for merging
+        df_aug = df.rename(columns={'Service 1 Description (Code)': 'Shift Code'})
+        df_aug = deepcopy(df_aug.loc[~df_aug['Shift Code'].str.contains('Adaptive Behavior Treatment')])
+        # split the 'Service Provider' column on comma separator and extract First name and Surname
+        df_aug[['Surname', 'First Name']] = df_aug['Service Provider'].str.split(', ', expand=True)
+        # concatenate First name and Surname columns in the desired order
+        df_aug['Service Provider'] = df_aug['First Name'] + ' ' + df_aug['Surname']
+        # drop First name and Surname columns
+        df_aug.drop(columns=['First Name', 'Surname'], inplace=True)
+        df_aug=pd.merge(df_aug, non_manager_rates, how='left', on='Shift Code')
+        # append accure rates
+        for name, accrued in zip(manager_rates['Name'], manager_rates['Accrue Rate']):
+            df_aug.loc[(df_aug['Service Provider'] == name), ['Accrue Rate']] = accrued
+        # add holiday hours
+        calc_holiday_hours(df_aug)
+        # identify staff roles:
+        staff_names = df_aug['Service Provider'].unique()
+        manager_status = [is_manager(i, manager_rates) for i in staff_names]
+        non_mgr = [] #list of names
+        mgr = [] #list of names
+        for i, name in enumerate(staff_names):
+            if manager_status[i]:
+                mgr.append(name)
+            else:
+                non_mgr.append(name)
+        # generate payrolls
+        non_mgr_payroll = non_manager_payroll(non_mgr, df_aug, PAY_PERIOD)
+        mgr_payroll = manager_payroll(mgr, manager_rates, df_aug, PAY_PERIOD)
+    except:
+        processed_lab.configure(text= 'Unknown Error Encountered When Processing Payroll.')
 
 def process_file():
-    '''Done'''
+    '''
+    Process shift and payroll in a row
+    '''
     global df, manager_rates, non_manager_rates, df_aug, non_mgr_payroll, mgr_payroll, PAY_PERIOD
     process_shift()
     process_payroll()
@@ -185,7 +202,9 @@ def process_file():
 
 
 def save_file():
-    '''Done'''
+    '''
+    Save processed spreadsheets
+    '''
     save_lab.configure(text='')
     save_path = asksaveasfile(mode='w', defaultextension=".xlsx").name
     print(save_path)
@@ -196,6 +215,8 @@ def save_file():
         non_mgr_payroll.to_excel(writer, sheet_name='Non-Manager Payroll', index=False, na_rep='NaN')
         mgr_payroll.to_excel(writer, sheet_name='Manager Payroll', index=False, na_rep='NaN')
         df_aug.to_excel(writer, sheet_name='Shift with Pay Rates', index=False, na_rep='NaN')
+        non_manager_rates.to_excel(writer, sheet_name='Non-Manager Pay Rates', index=False, na_rep='NaN')
+        manager_rates.to_excel(writer, sheet_name='Manager Pay Rates', index=False, na_rep='NaN')
         
         for column in non_mgr_payroll:
             column_length = max(non_mgr_payroll[column].astype(str).map(len).max(), len(column))
@@ -210,14 +231,23 @@ def save_file():
         for column in df_aug:
             column_length = max(df_aug[column].astype(str).map(len).max(), len(column))
             col_idx = df_aug.columns.get_loc(column)
-            writer.sheets['Shift with Pay Rates'].set_column(col_idx, col_idx, column_length)\
-            
+            writer.sheets['Shift with Pay Rates'].set_column(col_idx, col_idx, column_length)
+        
+        for column in non_manager_rates:
+            column_length = max(non_manager_rates[column].astype(str).map(len).max(), len(column))
+            col_idx = non_manager_rates.columns.get_loc(column)
+            writer.sheets['Non-Manager Pay Rates'].set_column(col_idx, col_idx, column_length)
+        
+        for column in manager_rates:
+            column_length = max(manager_rates[column].astype(str).map(len).max(), len(column))
+            col_idx = manager_rates.columns.get_loc(column)
+            writer.sheets['Manager Pay Rates'].set_column(col_idx, col_idx, column_length)
+
         writer.save() 
         save_lab.configure(text='File Saved Successfully!')
     except:
         save_lab.configure(text='File Not Saved!')
 
-#########################################################
 # UI
 window = Tk()
 window.title('Nova Support Home Data Processor (Demo)')
@@ -327,16 +357,16 @@ canvas.create_text(
 cimg = PhotoImage(width=1, height=1)
 
 read_shift_lab = Label(window, text="", font=('lucida', 20),bg = "white")
-read_shift_lab.place(x=696.0,y=277.0)
+read_shift_lab.place(x=600.0,y=277.0)
 
 read_wage_lab = Label(window, text="", font=('lucida', 20),bg = "white")
-read_wage_lab.place(x=696.0,y=362.0)
+read_wage_lab.place(x=600.0,y=362.0)
 
-shift_processed_lab = Label(window, text="", font=('lucida', 20),bg = "white")
-shift_processed_lab.place(x=696.0,y=550.0)
+processed_lab = Label(window, text="", font=('lucida', 20),bg = "white")
+processed_lab.place(x=600.0,y=550.0)
 
 save_lab = Label(window, text="", font=('lucida', 20), bg = "white")
-save_lab.place(x=696.0, y=740.0)
+save_lab.place(x=600.0, y=740.0)
 
 # Initialize UI  Buttons
 load_shift_btn = Button(window, text = 'upload shift records',command = lambda:open_shift_file(), image=cimg, width=324, height=43,compound='c',font=('lucida', 20))
