@@ -1,4 +1,4 @@
-# Version 0.0.3
+# Version 0.0.4
 # April 28, 2023
 import pandas as pd # For importing, manipulating, and exporting data
 import re # Python regular expression support
@@ -22,12 +22,14 @@ df = pd.DataFrame()
 manager_rates = pd.DataFrame()
 # non-manager rates data
 non_manager_rates = pd.DataFrame()
+#other wages
+other_rates = pd.DataFrame()
 # shift data merged with non-manager rates
 df_aug = pd.DataFrame()
 # payroll for non-managers
-non_mgr_payroll = pd.DataFrame()
+non_mgr_payroll = []
 # payroll for managers
-mgr_payroll = pd.DataFrame()
+mgr_payroll = []
 # a string indicating pay period
 PAY_PERIOD = ''
 
@@ -69,7 +71,7 @@ def open_rates_file():
     '''
     Open an Excel file containing manager and non-manager rates and check formatting.
     '''
-    global manager_rates, non_manager_rates
+    global manager_rates, non_manager_rates, other_rates
     filepath =''
     read_wage_lab.configure(text='')
     try:
@@ -80,9 +82,11 @@ def open_rates_file():
         manager_rates = pd.read_excel(filepath, sheet_name="Manager Rates")
         # Read "Non-manager Rates" sheet
         non_manager_rates = pd.read_excel(filepath, sheet_name="Non-manager Rates")
+        # Read "Other Wages"
+        other_rates = pd.read_excel(filepath, sheet_name="Other Wages")
         try:
-            non_manager_rates = non_manager_rates[['Shift Code', 'Regular Hourly Wage', 'BOT Hourly Wage', 'Accrue Rate']]
-            manager_rates = manager_rates[['Name', 'Non-exempt Hourly Wage', 'Exempt Weekly Wage', 'Exempt Biweekly Wage', 'Accrue Rate']]
+            non_manager_rates = non_manager_rates[['Shift Code', 'Regular Hourly Wage', 'BOT Hourly Wage', 'Accrual Rate']]
+            manager_rates = manager_rates[['Name', 'Non-exempt Hourly Wage', 'Exempt Weekly Wage', 'Exempt Biweekly Wage', 'Accrual Rate']]
             read_wage_lab.configure(text='Billing & Wage Rates Loaded Successfully.')
         except:
             read_wage_lab.configure(text='The File Does Not Contain All Columns Needed.')
@@ -90,7 +94,7 @@ def open_rates_file():
         if filepath=='':
             return
         else:
-            read_wage_lab.configure(text='The File Must Be An Excel Containing Manager and Non-Manager Rates.')
+            read_wage_lab.configure(text='The File Must Be An Excel Containing Manager, Non-Manager Rates, and Other Wages.')
 
 def process_shift():
     '''
@@ -127,7 +131,6 @@ def process_shift():
         PAY_PERIOD = str(CIDT.min().date()) + ' - ' + str(CODT.max().date())
         # Calculate time difference from check-in and check-out datetimes
         CTD = (CODT - CIDT).dt.total_seconds() / 60
-
     except:
         processed_lab.configure(text='Problem Detected in Check-In/Check-Out Dates and Times')
         return
@@ -135,12 +138,11 @@ def process_shift():
     try:
         SWD_min = df['Staff Worked Duration'].apply(lambda x: (int(x.split(':')[0]) * 60) + int(x.split(':')[1]))
     except:
-        processed_lab.configure(text='Problem Detected in Staff Worked Duration/Staff Worked Duration (Minutes)')
-        return
+        SWD_min = CTD
     df = df.rename(columns={'Service 1 Description (Code)': 'Shift Code'})
     # Error check:
-    # 1. Check if Staff Work Duration == Staff Work Duration (Minutes)
-    error1 = (SWD_min == df['Staff Worked Duration (Minutes)']) #True means no error
+ # 1. Check if Staff Work Duration ==  Staff Work Duration (Minutes)
+    error1 = (SWD_min - df['Staff Worked Duration (Minutes)']).abs() <= 1.1
     # 2. Check if |Staff Work Duration (Minutes) - Calculated Time Difference| <= 1
     error2 = ((df['Staff Worked Duration (Minutes)'] - CTD).abs() <= 1.1) # 1.1 to avoid float precision issues
     df["Passed Error Check"] = (error1 & error2) # The data is "sane" only when both checks are passed
@@ -156,7 +158,7 @@ def process_payroll():
     '''
     Process payroll for managers and non-managers
     '''
-    global df, manager_rates, non_manager_rates, df_aug, non_mgr_payroll, mgr_payroll, PAY_PERIOD
+    global df, manager_rates, non_manager_rates, other_rates, df_aug, non_mgr_payroll, mgr_payroll, PAY_PERIOD
     try:
         # prepare for merging
         df_aug = df.rename(columns={'Service 1 Description (Code)': 'Shift Code'})
@@ -168,11 +170,24 @@ def process_payroll():
         # drop First name and Surname columns
         df_aug.drop(columns=['First Name', 'Surname'], inplace=True)
         df_aug=pd.merge(df_aug, non_manager_rates, how='left', on='Shift Code')
+        admin_shifts = df_aug[df_aug['Shift Code'] == 'Admin']
+        admin_names = admin_shifts['Service Provider'].tolist()
+        # Filter the rows in other_rates where the NAME column matches the names of the Service Providers in the Admin shifts
+        admin_rates = other_rates[other_rates['Service Provider'].isin(admin_names)]\
+        # Merge the Admin rates back into the Admin shifts dataframe
+        admin_shifts_merged = pd.merge(admin_shifts, admin_rates, on='Service Provider', how='left')
+        # Fill the Regular Hourly Wage and Overtime Hourly Wage columns with the values from the ADMIN/VACAY/SICK WAGE column
+        admin_shifts_merged.loc[:, 'Regular Hourly Wage'] = admin_shifts_merged['ADMIN/VACAY/SICK WAGE']
+        admin_shifts_merged.loc[:, 'BOT Hourly Wage'] = admin_shifts_merged['ADMIN/VACAY/SICK WAGE']
+        admin_shifts_merged.loc[:, 'Accrual Rate'] = 0.04
+        admin_shifts_merged = admin_shifts_merged.drop("ADMIN/VACAY/SICK WAGE", axis=1)
+        df_aug = df_aug[df_aug['Shift Code'] != 'Admin']
+        df_aug = pd.concat([df_aug, admin_shifts_merged], ignore_index=True)
         # append accure rates
-        for name, accrued in zip(manager_rates['Name'], manager_rates['Accrue Rate']):
-            df_aug.loc[(df_aug['Service Provider'] == name), ['Accrue Rate']] = accrued
+        for name, accrued in zip(manager_rates['Name'], manager_rates['Accrual Rate']):
+            df_aug.loc[(df_aug['Service Provider'] == name), ['Accrual Rate']] = accrued
         # add holiday hours
-        calc_holiday_hours(df_aug)
+        calc_worked_holiday(df_aug)
         # identify staff roles:
         staff_names = df_aug['Service Provider'].unique()
         manager_status = [is_manager(i, manager_rates) for i in staff_names]
@@ -212,21 +227,17 @@ def save_file():
         return
     try:
         writer = pd.ExcelWriter(save_path) 
-        non_mgr_payroll.to_excel(writer, sheet_name='Non-Manager Payroll', index=False, na_rep='NaN')
-        mgr_payroll.to_excel(writer, sheet_name='Manager Payroll', index=False, na_rep='NaN')
+        startrow = 0
+        for person in [ *non_mgr_payroll, *mgr_payroll ]:
+            for df in [person['header'], person['payroll'],person['summary']]:
+                df.to_excel(writer, engine="xlsxwriter",sheet_name='Payroll', startrow=startrow, index=False)
+                startrow += (df.shape[0] + 1)
+            startrow += 3
+        writer.sheets['Payroll'].set_column(0, 4, 28)
+
         df_aug.to_excel(writer, sheet_name='Shift with Pay Rates', index=False, na_rep='NaN')
         non_manager_rates.to_excel(writer, sheet_name='Non-Manager Pay Rates', index=False, na_rep='NaN')
         manager_rates.to_excel(writer, sheet_name='Manager Pay Rates', index=False, na_rep='NaN')
-        
-        for column in non_mgr_payroll:
-            column_length = max(non_mgr_payroll[column].astype(str).map(len).max(), len(column))
-            col_idx = non_mgr_payroll.columns.get_loc(column)
-            writer.sheets['Non-Manager Payroll'].set_column(col_idx, col_idx, column_length)
-        
-        for column in mgr_payroll:
-            column_length = max(mgr_payroll[column].astype(str).map(len).max(), len(column))
-            col_idx = mgr_payroll.columns.get_loc(column)
-            writer.sheets['Manager Payroll'].set_column(col_idx, col_idx, column_length)
         
         for column in df_aug:
             column_length = max(df_aug[column].astype(str).map(len).max(), len(column))
