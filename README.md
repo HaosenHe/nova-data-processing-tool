@@ -2,7 +2,7 @@
 
 Data processing toolkit for Nova Home Support (and other residential care programs).
 
-Version 0.3
+Version 0.4
 
 ### Current Capabilities:
 * Drop irrelevant columns.
